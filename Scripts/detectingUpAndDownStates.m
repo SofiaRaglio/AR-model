@@ -1,6 +1,9 @@
+%% Detecting up and down states in PF and PM cortex
+% This script is used to produce Figure 1c of the paper. 
+
 clear all;
 %%
-load('MEAMUALFP.mat')
+load('path/to/MEAMUALFP.mat')
 %%
 TimeRange = [0 250] + 3000;
 PFchannels = setdiff(1:96,[20,66,88]);
