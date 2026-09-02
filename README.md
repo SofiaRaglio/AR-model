@@ -57,7 +57,7 @@ Run the `ARMA_*.m` scripts to retrain kernels from raw data; use the plotting an
 |--------|--------------|-------------|
 | `ARMA_PF.m`, `ARMA_PM.m` | Fig. 2b | Train intra-area AR models |
 | `ARMA_PFtoPM.m`, `ARMA_PMtoPF.m` | Fig. 5a | Train cross-area AR models |
-| `plotStarsInPCn.m` | Fig. 3a,c,d (B); Suppl. Fig. 1c (C) | Kernel PCA visualisation |
+| `plotStarsInPCn.m` | Fig. 3a,c,d (B); Suppl. Fig. 2c (C) | Kernel PCA visualisation |
 | `KernelDistDependencePF.m`, `KernelDistDependencePM.m` | Fig. 3d | Kernel distance dependence of contribution to reconstruction |
 | `PcaKernels.m` | Fig. 4a (B); Suppl. Fig. 3a (C) | Correlations between kernel PCA components |
 | `PC_trunc.m` | Fig. 4b (B); Fig. 2b (C) | PCA truncation at 90% variance |
@@ -71,15 +71,16 @@ Run the `ARMA_*.m` scripts to retrain kernels from raw data; use the plotting an
 
 Python scripts with supplementary analyses requested during peer review. Several are ports of the common MATLAB figure scripts.
 
-| Script | Description |
-|--------|-------------|
-| `boxplot_kernels.py` | Port of `Boxplot.m` |
-| `boxplot_interarea_kernels.py` | Port of `BoxplotInterArea.m` |
-| `detecting_up_and_down_states.py` | Port of `detectingUpAndDownStates.m` |
-| `psd_lfp.py` | Wavelet-based LFP power spectral density |
-| `percolation_analysis.py` | Shared percolation analysis module |
-| `run_percolation_summary.py` | Run percolation for both monkeys; export summary table |
-| `evaluate_kernel_metrics.py` | Evaluate precomputed kernels on held-out test windows |
+| Script | Paper Figure | Description |
+|--------|--------------|-------------|
+| `boxplot_kernels.py` | | Port of `Boxplot.m` |
+| `boxplot_interarea_kernels.py` | | Port of `BoxplotInterArea.m` |
+| `detecting_up_and_down_states.py` | | Port of `detectingUpAndDownStates.m` |
+| `psd_lfp.py` | Suppl. Fig. 1b | Wavelet-based LFP power spectral density |
+| `percolation_analysis.py` | | Shared percolation analysis module |
+| `run_percolation_summary.py` | | Run percolation for both monkeys; export summary table |
+| `evaluate_kernel_metrics.py` | | Evaluate precomputed kernels on held-out test windows |
+| `arma_average_lfp.py` | Suppl. Fig. 2 | Compute the performance comparison between average to average prediction, per-channel prediction and average subtracted per-channel prediction |
 
 
 ## Requirements

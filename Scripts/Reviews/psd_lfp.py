@@ -4,6 +4,9 @@ Wavelet-based LFP power spectral density (Python port of SpectrogramAG_V4.m).
 
 Uses the same complex-Gaussian wavelet convolution as wavelet_specgram_fast, then
 averages instantaneous power |z(t)|^2 over time to obtain a 1D PSD vs frequency.
+
+Each state is [t0 + TransientPeriod, t0 + TransientPeriod + STATE_DURATION].
+STATE_DURATION is 1000 s.
 """
 
 from __future__ import annotations
@@ -37,10 +40,26 @@ AREA_LABELS = {
     "PM": "Premotor",
 }
 
-# SpectrogramAG_V4.m defaults
-DT = 0.005
-TIME_START_IDX = 1000       # MATLAB 1-based index
-TIME_END_IDX = 2_040_000    # MATLAB 1-based index
+# Starts match ARMA_*.m transients. 1000 s windows do not overlap:
+# Monkey B gaps: wake|anesth 1900 s, anesth|awake 3600 s
+# Monkey C gaps: wake|anesth 2000 s, anesth|awake 1250 s
+STATE_DURATION = 1000.0
+
+STATE_ORDER = ("Wakefulness", "Anesthesia", "Awakening")
+STATE_TRANSIENTS = {
+    "MonkeyB": {
+        "Wakefulness": 100.0,
+        "Anesthesia": 3000.0,
+        "Awakening": 7600.0,
+    },
+    "MonkeyC": {
+        "Wakefulness": 1000.0,
+        "Anesthesia": 4000.0,
+        "Awakening": 6250.0,
+    },
+}
+
+# Spectrogram.m used MATLAB samples 1000–2_040_000 (~full recording, all states mixed)
 BANDWIDTH = 0.05
 SD_TIMES = 4.0
 USE_SINGLE = True
@@ -54,31 +73,47 @@ BANDS = {
 }
 
 
-def load_segment_ag_v4(mat_path: Path) -> tuple[np.ndarray, np.ndarray, float]:
-    """Load PF/PM mean LFP traces using SpectrogramAG_V4 indexing and channel groups."""
+def _as_channels_by_time(values: np.ndarray, n_time: int) -> np.ndarray:
+    """Return LFP as (channels, time), handling MATLAB v7.3 transposition."""
+    if values.ndim != 2:
+        raise ValueError(f"MEALFP/values must be 2D, got shape {values.shape}")
+    if values.shape[1] == n_time:
+        return values
+    if values.shape[0] == n_time:
+        return values.T
+    raise ValueError(
+        f"MEALFP/values shape {values.shape} does not match time length {n_time}"
+    )
+
+
+def load_state_segments(
+    mat_path: Path, monkey: str
+) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray, float]]:
+    """Load PF/PM mean LFP for each behavioral state (ARMA 250 s windows)."""
     with h5py.File(mat_path, "r") as f:
         time = np.asarray(f["MEALFP/time"]).squeeze()
-        values = np.asarray(f["MEALFP/values"]).T  # channels x time
+        values = _as_channels_by_time(np.asarray(f["MEALFP/values"]), time.size)
         dt = float(np.asarray(f["MEALFP/dt"]).squeeze())
 
-    t0 = time[0]
-    i_start = max(0, TIME_START_IDX - 1)
-    i_end = min(values.shape[1], TIME_END_IDX)
-    t_start = time[i_start]
-    t_end = time[i_end - 1]
-
-    time_s = max(0, int(round((t_start - t0) / dt)))
-    time_e = min(values.shape[1], int(round((t_end - t0) / dt)) + 1)
-
-    seg_pf = np.mean(values[0:96, time_s:time_e], axis=0).astype(np.float64)
-    seg_pm = np.mean(values[96:192, time_s:time_e], axis=0).astype(np.float64)
-    t_vec = time[time_s:time_e]
-
-    if USE_SINGLE:
-        seg_pf = seg_pf.astype(np.float32)
-        seg_pm = seg_pm.astype(np.float32)
-
-    return seg_pf, seg_pm, t_vec, dt
+    t0 = float(time[0])
+    out: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray, float]] = {}
+    for state in STATE_ORDER:
+        transient = STATE_TRANSIENTS[monkey][state]
+        t_start = t0 + transient
+        t_end = t_start + STATE_DURATION
+        mask = (time >= t_start) & (time <= t_end)
+        idx = np.flatnonzero(mask)
+        if idx.size == 0:
+            raise ValueError(
+                f"{monkey} {state}: no samples in [{t_start:.1f}, {t_end:.1f}] s"
+            )
+        i0, i1 = int(idx[0]), int(idx[-1]) + 1
+        t_vec = time[i0:i1]
+        dtype = np.float32 if USE_SINGLE else np.float64
+        seg_pf = np.mean(values[0:96, i0:i1], axis=0).astype(dtype)
+        seg_pm = np.mean(values[96:192, i0:i1], axis=0).astype(dtype)
+        out[state] = (seg_pf, seg_pm, t_vec, dt)
+    return out
 
 
 def frequency_centers_log(f1: float, f2: float, n_freq: int) -> np.ndarray:
@@ -150,6 +185,18 @@ def fit_loglog_slope(
     return float(slope)
 
 
+def _psd_ylim(panel_results: list[dict], f_min: float, f_max: float) -> tuple[float, float]:
+    ymax = max(
+        np.max(res["psd"][(res["freqs"] >= f_min) & (res["freqs"] <= f_max)])
+        for res in panel_results
+    )
+    ymin = min(
+        np.min(res["psd"][(res["freqs"] >= f_min) & (res["freqs"] <= f_max)])
+        for res in panel_results
+    )
+    return ymin * 0.5, ymax * 3
+
+
 def plot_psd(
     results: list[dict],
     f_min: float,
@@ -157,41 +204,42 @@ def plot_psd(
     output: Path | None,
 ) -> None:
     monkeys = list(dict.fromkeys(res["monkey"] for res in results))
-    fig, axes = plt.subplots(1, len(monkeys), figsize=(5 * len(monkeys), 4.5), squeeze=False)
+    states = list(dict.fromkeys(res["state"] for res in results))
+    n_row, n_col = len(states), len(monkeys)
+    fig, axes = plt.subplots(
+        n_row, n_col, figsize=(5 * n_col, 3.8 * n_row), squeeze=False
+    )
 
     for col, monkey in enumerate(monkeys):
-        ax = axes[0, col]
         monkey_results = [res for res in results if res["monkey"] == monkey]
+        ylim = _psd_ylim(monkey_results, f_min, f_max)
 
-        for res in monkey_results:
-            mask = (res["freqs"] >= f_min) & (res["freqs"] <= f_max)
-            ax.loglog(
-                res["freqs"][mask],
-                res["psd"][mask],
-                lw=2.0,
-                color=AREA_COLORS[res["area"]],
-                label=AREA_LABELS[res["area"]],
-            )
+        for row, state in enumerate(states):
+            ax = axes[row, col]
+            panel = [res for res in monkey_results if res["state"] == state]
+            for res in panel:
+                mask = (res["freqs"] >= f_min) & (res["freqs"] <= f_max)
+                ax.loglog(
+                    res["freqs"][mask],
+                    res["psd"][mask],
+                    lw=2.0,
+                    color=AREA_COLORS[res["area"]],
+                    label=AREA_LABELS[res["area"]],
+                )
 
-        ymax = max(
-            np.max(res["psd"][(res["freqs"] >= f_min) & (res["freqs"] <= f_max)])
-            for res in monkey_results
-        )
-        ymin = min(
-            np.min(res["psd"][(res["freqs"] >= f_min) & (res["freqs"] <= f_max)])
-            for res in monkey_results
-        )
+            ax.set_xlim(f_min, f_max)
+            ax.set_ylim(*ylim)
+            ax.grid(True, which="both", alpha=0.25)
+            if row == 0:
+                ax.set_title(MONKEY_LABELS[monkey])
+            if col == 0:
+                ax.set_ylabel(f"{state}\nPower spectral density (a.u.)")
+            if row == n_row - 1:
+                ax.set_xlabel("Frequency (Hz)")
+            if row == 0:
+                ax.legend(loc="upper right", framealpha=0.9)
 
-        ax.set_xlim(f_min, f_max)
-        ax.set_ylim(ymin * 0.5, ymax * 3)
-        ax.set_title(MONKEY_LABELS[monkey])
-        ax.legend(loc="upper right", framealpha=0.9)
-        ax.grid(True, which="both", alpha=0.25)
-        if col == 0:
-            ax.set_ylabel("Power spectral density (a.u.)")
-        ax.set_xlabel("Frequency (Hz)")
-
-    fig.suptitle("LFP power spectral density", y=1.02, fontsize=12)
+    fig.suptitle("LFP power spectral density", y=1.01, fontsize=12)
     fig.tight_layout()
 
     if output is not None:
@@ -238,7 +286,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path(__file__).resolve().parent / "figures" / "lfp_psd_loglog.png",
+        default=Path(__file__).resolve().parent / "figures" / "lfp_psd_loglog_by_state.png",
     )
     parser.add_argument("--no-show", action="store_true")
     args = parser.parse_args()
@@ -254,36 +302,41 @@ def main() -> None:
     for name in args.datasets:
         mat_path = DEFAULT_DATASETS[name]
         print(f"\n=== {MONKEY_LABELS[name]} ===")
-        seg_pf, seg_pm, t_vec, dt = load_segment_ag_v4(mat_path)
-        segments = {"PF": seg_pf, "PM": seg_pm}
+        state_segments = load_state_segments(mat_path, name)
 
-        print(
-            f"  segment: {t_vec[0]:.1f}–{t_vec[-1]:.1f} s "
-            f"({seg_pf.size} samples, dt={dt:g} s, fs={1/dt:.1f} Hz)"
-        )
-
-        for area_key, area_label in areas:
-            label = f"{name} {area_key}"
-            print(f"  computing wavelet PSD: {label}")
-            psd = wavelet_psd(segments[area_key], freqs, dt)
-            results.append(
-                {
-                    "label": label,
-                    "monkey": name,
-                    "area": area_key,
-                    "freqs": freqs,
-                    "psd": psd,
-                }
+        for state in STATE_ORDER:
+            seg_pf, seg_pm, t_vec, dt = state_segments[state]
+            segments = {"PF": seg_pf, "PM": seg_pm}
+            transient = STATE_TRANSIENTS[name][state]
+            print(
+                f"  {state}: t0+{transient:g}–{transient + STATE_DURATION:g} s "
+                f"({t_vec[0]:.1f}–{t_vec[-1]:.1f} s absolute, "
+                f"{seg_pf.size} samples, dt={dt:g} s, fs={1 / dt:.1f} Hz)"
             )
 
-            slope = fit_loglog_slope(freqs, psd, 2.0, 40.0)
-            print(f"  1/f slope (2–40 Hz): {slope:.2f}")
-            for band, (f_lo, f_hi) in BANDS.items():
-                if f_hi <= args.f_max:
-                    print(
-                        f"  {band:5s} power ({f_lo:g}–{f_hi:g} Hz): "
-                        f"{band_power(freqs, psd, f_lo, f_hi):.4g}"
-                    )
+            for area_key, _area_label in areas:
+                label = f"{name} {state} {area_key}"
+                print(f"    computing wavelet PSD: {label}")
+                psd = wavelet_psd(segments[area_key], freqs, dt)
+                results.append(
+                    {
+                        "label": label,
+                        "monkey": name,
+                        "state": state,
+                        "area": area_key,
+                        "freqs": freqs,
+                        "psd": psd,
+                    }
+                )
+
+                slope = fit_loglog_slope(freqs, psd, 2.0, 40.0)
+                print(f"    1/f slope (2–40 Hz): {slope:.2f}")
+                for band, (f_lo, f_hi) in BANDS.items():
+                    if f_hi <= args.f_max:
+                        print(
+                            f"    {band:5s} power ({f_lo:g}–{f_hi:g} Hz): "
+                            f"{band_power(freqs, psd, f_lo, f_hi):.4g}"
+                        )
 
     if not args.no_show:
         plot_psd(results, f_min=args.f_min, f_max=args.f_max, output=args.output)
