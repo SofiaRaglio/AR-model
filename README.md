@@ -58,7 +58,7 @@ Run the `ARMA_*.m` scripts to retrain kernels from raw data; use the plotting an
 | `ARMA_PF.m`, `ARMA_PM.m` | Fig. 2b | Train intra-area AR models |
 | `ARMA_PFtoPM.m`, `ARMA_PMtoPF.m` | Fig. 5a | Train cross-area AR models |
 | `plotStarsInPCn.m` | Fig. 3a,c,d (B); Suppl. Fig. 2c (C) | Kernel PCA visualisation |
-| `KernelDistDependencePF.m`, `KernelDistDependencePM.m` | Fig. 3d | Kernel distance dependence of contribution to reconstruction |
+| `KernelDistDependencePF.m`, `KernelDistDependencePM.m` | Fig. 3e | Kernel distance dependence of contribution to reconstruction |
 | `PcaKernels.m` | Fig. 4a (B); Suppl. Fig. 3a (C) | Correlations between kernel PCA components |
 | `PC_trunc.m` | Fig. 4b (B); Fig. 2b (C) | PCA truncation at 90% variance |
 | `Percolation.m` | — | Percolation function |
