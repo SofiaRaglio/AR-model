@@ -201,12 +201,12 @@ EV = EV/EV(end);
 PCtruncCAwPF2PM=find(EV>0.9,1);
 
 %%
-Wa = mean([PCtruncCWaPF PCtruncCWaPM PCtruncCWaPF2PM PCtruncCWaPM2PF]);
-errWa = std([PCtruncCWaPF PCtruncCWaPM PCtruncCWaPF2PM PCtruncCWaPM2PF]);
-SO = mean([PCtruncCSOPF PCtruncCSOPM PCtruncCSOPF2PM PCtruncCSOPM2PF]);
-errSO = std([PCtruncCSOPF PCtruncCSOPM PCtruncCSOPF2PM PCtruncCSOPM2PF]);
-Aw = mean([PCtruncCAwPF PCtruncCAwPM PCtruncCAwPF2PM PCtruncCAwPM2PF]);
-errAw = std([PCtruncCAwPF PCtruncCAwPM PCtruncCAwPF2PM PCtruncCAwPM2PF]);
+Wa = mean([PCtruncCWaPF PCtruncCWaPM]);% PCtruncCWaPF2PM PCtruncCWaPM2PF]);
+errWa = std([PCtruncCWaPF PCtruncCWaPM]);% PCtruncCWaPF2PM PCtruncCWaPM2PF]);
+SO = mean([PCtruncCSOPF PCtruncCSOPM]);% PCtruncCSOPF2PM PCtruncCSOPM2PF]);
+errSO = std([PCtruncCSOPF PCtruncCSOPM]);% PCtruncCSOPF2PM PCtruncCSOPM2PF]);
+Aw = mean([PCtruncCAwPF PCtruncCAwPM]);% PCtruncCAwPF2PM PCtruncCAwPM2PF]);
+errAw = std([PCtruncCAwPF PCtruncCAwPM]);% PCtruncCAwPF2PM PCtruncCAwPM2PF]);
 %%
 figure
 errorbar([Wa SO Aw],[errWa errSO errAw],'.-','MarkerSize',15)
