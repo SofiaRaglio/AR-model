@@ -64,6 +64,23 @@ def load_subject_states(
     return out
 
 
+def rank_biserial(a: np.ndarray, b: np.ndarray) -> float:
+    """Matched-pairs rank-biserial correlation for a Wilcoxon signed-rank test.
+
+    Differences are a - b. Positive r_rb means a tends to exceed b.
+    Zero differences are dropped. r_rb is in [-1, 1].
+    """
+    diff = np.asarray(a, dtype=float) - np.asarray(b, dtype=float)
+    diff = diff[diff != 0]
+    n = diff.size
+    if n == 0:
+        return float("nan")
+    ranks = stats.rankdata(np.abs(diff))
+    r_pos = float(ranks[diff > 0].sum())
+    r_neg = float(ranks[diff < 0].sum())
+    return (r_pos - r_neg) / (n * (n + 1) / 2)
+
+
 def state_significance(
     groups: dict[str, np.ndarray], paired: bool = True
 ) -> dict:
@@ -94,6 +111,7 @@ def state_significance(
                     "test": "Wilcoxon signed-rank",
                     "stat": float(wstat),
                     "p": float(wp),
+                    "r_rb": rank_biserial(groups[a], groups[b]),
                 }
             )
         n_pairs = len(pairwise)
@@ -136,7 +154,9 @@ def print_significance(label: str, res: dict) -> None:
         sig = "*" if row["p_bonferroni"] < 0.05 else "ns"
         print(
             f"  {row['comparison']}: {row['test']}, "
-            f"p = {row['p']:.4g}, p_Bonferroni = {row['p_bonferroni']:.4g} {sig}"
+            f"p = {row['p']:.4g}, p_Bonferroni = {row['p_bonferroni']:.4g}"
+            + (f", r_rb = {row['r_rb']:.3g}" if "r_rb" in row else "")
+            + f" {sig}"
         )
 
 

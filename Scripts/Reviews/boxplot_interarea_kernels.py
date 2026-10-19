@@ -89,10 +89,16 @@ def format_p(p: float) -> str:
 
 
 def print_pairwise_table(rows: list[tuple]) -> None:
-    print("\nPairwise p-values (Wilcoxon signed-rank, Bonferroni ×3, n=96 channels)")
-    print("Monkey\tDirection\tWake vs Anest\tAnest vs Awak\tWake vs Awak")
-    for monkey, direction, p_wa, p_aa, p_waw in rows:
-        print(f"{monkey}\t{direction}\t{format_p(p_wa)}\t{format_p(p_aa)}\t{format_p(p_waw)}")
+    print("\nPairwise Wilcoxon signed-rank, Bonferroni ×3")
+    print(
+        "Monkey\tDirection\t"
+        "Wa vs An p\tr_rb\tAn vs Aw p\tr_rb\tWa vs Aw p\tr_rb"
+    )
+    for monkey, direction, p_wa, r_wa, p_aa, r_aa, p_waw, r_waw in rows:
+        print(
+            f"{monkey}\t{direction}\t{format_p(p_wa)}\t{r_wa:.2f}\t"
+            f"{format_p(p_aa)}\t{r_aa:.2f}\t{format_p(p_waw)}\t{r_waw:.2f}"
+        )
 
 
 def run(scripts_root: Path, out_dir: Path, paired: bool = True) -> None:
@@ -115,20 +121,27 @@ def run(scripts_root: Path, out_dir: Path, paired: bool = True) -> None:
             bk.print_significance(f"{label} — {direction}", res)
 
             pmap: dict[str, float] = {}
+            rmap: dict[str, float] = {}
             for row in res["pairwise"]:
                 if row["comparison"] == "Wakefulness vs Anesthesia":
                     pmap["wa_an"] = row["p_bonferroni"]
+                    rmap["wa_an"] = row["r_rb"]
                 elif row["comparison"] == "Anesthesia vs Awakening":
                     pmap["an_aw"] = row["p_bonferroni"]
+                    rmap["an_aw"] = row["r_rb"]
                 elif row["comparison"] == "Wakefulness vs Awakening":
                     pmap["wa_aw"] = row["p_bonferroni"]
+                    rmap["wa_aw"] = row["r_rb"]
             table_rows.append(
                 (
                     bk.SUBJECT_LABELS.get(subject, subject),
                     direction,
                     pmap["wa_an"],
+                    rmap["wa_an"],
                     pmap["an_aw"],
+                    rmap["an_aw"],
                     pmap["wa_aw"],
+                    rmap["wa_aw"],
                 )
             )
 
